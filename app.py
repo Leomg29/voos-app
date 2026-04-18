@@ -141,6 +141,7 @@ HTML = """
             background: #eaf2ff;
             color: #16306d;
             font-weight: bold;
+            line-height: 1.6;
         }
 
         .cards-voos {
@@ -353,7 +354,9 @@ HTML = """
                 </div>
 
                 <div class="faixa">
-                    Melhor opção escolhida com base em: {{ resultado.prioridade_label }}.
+                    Melhor opção escolhida com base em: {{ resultado.prioridade_label }}.<br><br>
+                    💰 Economia estimada: {{ resultado.economia_reais }}<br>
+                    ✈️ Economia em milhas: {{ resultado.economia_milhas }}
                 </div>
 
                 <div class="cards-voos">
@@ -547,6 +550,15 @@ def home():
 
         voos = dados_voos
 
+        # calcular economia em relação à opção mais cara
+        maior_preco = max(voo["preco_num"] for voo in dados_voos)
+        maior_milhas = max(voo["milhas_num"] for voo in dados_voos)
+
+        melhor_voo = next(voo for voo in dados_voos if voo["melhor"])
+
+        economia_reais = maior_preco - melhor_voo["preco_num"]
+        economia_milhas = maior_milhas - melhor_voo["milhas_num"]
+
         resultado = {
             "origem": origem,
             "destino": destino,
@@ -555,7 +567,9 @@ def home():
             "adultos": adultos,
             "criancas": criancas,
             "cabine": cabine,
-            "prioridade_label": prioridade_label(prioridade)
+            "prioridade_label": prioridade_label(prioridade),
+            "economia_reais": formatar_reais(economia_reais),
+            "economia_milhas": formatar_milhas(economia_milhas),
         }
 
     return render_template_string(HTML, resultado=resultado, voos=voos)
