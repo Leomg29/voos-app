@@ -1,4 +1,5 @@
 from flask import Flask, request, render_template_string
+from datetime import datetime, date
 
 app = Flask(__name__)
 
@@ -40,7 +41,7 @@ HTML = """
         }
 
         .container {
-            max-width: 1100px;
+            max-width: 1120px;
             margin: 30px auto;
             padding: 16px;
         }
@@ -135,6 +136,15 @@ HTML = """
             margin-bottom: 6px;
         }
 
+        .faixa {
+            margin-top: 16px;
+            padding: 14px;
+            border-radius: 12px;
+            background: #eaf2ff;
+            color: #16306d;
+            font-weight: bold;
+        }
+
         .cards-voos {
             margin-top: 24px;
             display: grid;
@@ -148,12 +158,13 @@ HTML = """
             border-radius: 16px;
             padding: 18px;
             box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+            position: relative;
         }
 
         .voo h3 {
             margin-top: 0;
             color: #1e3a8a;
-            font-size: 20px;
+            font-size: 22px;
         }
 
         .linha {
@@ -163,7 +174,7 @@ HTML = """
 
         .preco {
             margin-top: 14px;
-            padding: 10px;
+            padding: 10px 12px;
             border-radius: 12px;
             background: #eff6ff;
             font-weight: bold;
@@ -172,7 +183,7 @@ HTML = """
 
         .milhas {
             margin-top: 10px;
-            padding: 10px;
+            padding: 10px 12px;
             border-radius: 12px;
             background: #ecfdf5;
             font-weight: bold;
@@ -187,6 +198,18 @@ HTML = """
             padding: 6px 10px;
             border-radius: 999px;
             font-size: 13px;
+            font-weight: bold;
+        }
+
+        .selo {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            background: #16a34a;
+            color: white;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
             font-weight: bold;
         }
 
@@ -318,20 +341,29 @@ HTML = """
                     </div>
 
                     <div class="item">
-                        <strong>Status</strong>
-                        Comparação inicial gerada
+                        <strong>Antecedência</strong>
+                        {{ resultado.antecedencia }} dias
                     </div>
+                </div>
+
+                <div class="faixa">
+                    Estimativa inteligente: valores simulados com base em antecedência, cabine e quantidade de passageiros.
                 </div>
 
                 <div class="cards-voos">
                     {% for voo in voos %}
                     <div class="voo">
+                        {% if voo.melhor %}
+                        <div class="selo">Melhor opção</div>
+                        {% endif %}
+
                         <h3>{{ voo.companhia }}</h3>
                         <div class="linha"><strong>Rota:</strong> {{ resultado.origem }} → {{ resultado.destino }}</div>
                         <div class="linha"><strong>Saída:</strong> {{ resultado.data_ida }}</div>
                         <div class="linha"><strong>Cabine:</strong> {{ resultado.cabine }}</div>
                         <div class="linha"><strong>Bagagem:</strong> {{ voo.bagagem }}</div>
                         <div class="linha"><strong>Escalas:</strong> {{ voo.escalas }}</div>
+                        <div class="linha"><strong>Duração:</strong> {{ voo.duracao }}</div>
 
                         <div class="preco">Preço em dinheiro: {{ voo.preco }}</div>
                         <div class="milhas">Preço em milhas: {{ voo.milhas }}</div>
@@ -343,7 +375,7 @@ HTML = """
             {% endif %}
 
             <div class="rodape">
-                Versão online no Render • resultados demonstrativos
+                Versão online no Render • simulação inteligente de preços
             </div>
         </div>
     </div>
@@ -351,48 +383,133 @@ HTML = """
 </html>
 """
 
+def calcular_fator_antecedencia(dias):
+    if dias >= 180:
+        return 0.78
+    if dias >= 120:
+        return 0.88
+    if dias >= 90:
+        return 0.96
+    if dias >= 60:
+        return 1.05
+    if dias >= 30:
+        return 1.18
+    if dias >= 15:
+        return 1.35
+    return 1.60
+
+def calcular_fator_cabine(cabine):
+    fatores = {
+        "Econômica": 1.0,
+        "Premium Economy": 1.45,
+        "Executiva": 2.4,
+        "Primeira Classe": 4.0
+    }
+    return fatores.get(cabine, 1.0)
+
+def formatar_reais(valor):
+    texto = f"{valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"R$ {texto}"
+
+def formatar_milhas(valor):
+    texto = f"{valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    return f"{texto} milhas + taxas"
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     resultado = None
     voos = []
 
     if request.method == "POST":
-        resultado = {
-            "origem": request.form.get("origem"),
-            "destino": request.form.get("destino"),
-            "data_ida": request.form.get("data_ida"),
-            "data_volta": request.form.get("data_volta"),
-            "adultos": request.form.get("adultos"),
-            "criancas": request.form.get("criancas"),
-            "cabine": request.form.get("cabine")
-        }
+        origem = request.form.get("origem")
+        destino = request.form.get("destino")
+        data_ida = request.form.get("data_ida")
+        data_volta = request.form.get("data_volta")
+        adultos = int(request.form.get("adultos"))
+        criancas = int(request.form.get("criancas"))
+        cabine = request.form.get("cabine")
 
-        voos = [
+        try:
+            ida_date = datetime.strptime(data_ida, "%Y-%m-%d").date()
+            hoje = date.today()
+            antecedencia = (ida_date - hoje).days
+            if antecedencia < 0:
+                antecedencia = 0
+        except:
+            antecedencia = 0
+
+        fator_antecedencia = calcular_fator_antecedencia(antecedencia)
+        fator_cabine = calcular_fator_cabine(cabine)
+
+        passageiros_equivalentes = adultos + (criancas * 0.75)
+
+        base_latam = 920
+        base_gol = 870
+        base_azul = 980
+
+        milhas_latam = 28000
+        milhas_gol = 25500
+        milhas_azul = 30000
+
+        preco_latam = base_latam * fator_antecedencia * fator_cabine * passageiros_equivalentes
+        preco_gol = base_gol * fator_antecedencia * fator_cabine * passageiros_equivalentes
+        preco_azul = base_azul * fator_antecedencia * fator_cabine * passageiros_equivalentes
+
+        fator_milhas = 1 + ((fator_cabine - 1) * 0.9)
+
+        milhas_total_latam = milhas_latam * fator_antecedencia * fator_milhas * passageiros_equivalentes
+        milhas_total_gol = milhas_gol * fator_antecedencia * fator_milhas * passageiros_equivalentes
+        milhas_total_azul = milhas_azul * fator_antecedencia * fator_milhas * passageiros_equivalentes
+
+        dados_voos = [
             {
                 "companhia": "LATAM",
                 "bagagem": "1 bagagem de mão",
                 "escalas": "Sem escalas",
-                "preco": "R$ 1.245",
-                "milhas": "38.000 milhas + taxas",
+                "duracao": "2h 15min",
+                "preco_num": preco_latam,
+                "milhas_num": milhas_total_latam,
                 "tag": "Melhor tempo"
             },
             {
                 "companhia": "GOL",
                 "bagagem": "1 bagagem de mão",
                 "escalas": "1 escala",
-                "preco": "R$ 1.089",
-                "milhas": "35.500 milhas + taxas",
+                "duracao": "3h 05min",
+                "preco_num": preco_gol,
+                "milhas_num": milhas_total_gol,
                 "tag": "Melhor custo"
             },
             {
                 "companhia": "Azul",
                 "bagagem": "Bagagem de mão + item pessoal",
                 "escalas": "Sem escalas",
-                "preco": "R$ 1.328",
-                "milhas": "41.000 milhas + taxas",
+                "duracao": "2h 35min",
+                "preco_num": preco_azul,
+                "milhas_num": milhas_total_azul,
                 "tag": "Mais confortável"
             }
         ]
+
+        menor_preco = min(voo["preco_num"] for voo in dados_voos)
+
+        for voo in dados_voos:
+            voo["preco"] = formatar_reais(voo["preco_num"])
+            voo["milhas"] = formatar_milhas(voo["milhas_num"])
+            voo["melhor"] = voo["preco_num"] == menor_preco
+
+        voos = dados_voos
+
+        resultado = {
+            "origem": origem,
+            "destino": destino,
+            "data_ida": data_ida,
+            "data_volta": data_volta,
+            "adultos": adultos,
+            "criancas": criancas,
+            "cabine": cabine,
+            "antecedencia": antecedencia
+        }
 
     return render_template_string(HTML, resultado=resultado, voos=voos)
 
