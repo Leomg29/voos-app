@@ -11,9 +11,7 @@ HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Passagens e Milhas</title>
     <style>
-        * {
-            box-sizing: border-box;
-        }
+        * { box-sizing: border-box; }
 
         body {
             margin: 0;
@@ -227,9 +225,7 @@ HTML = """
         }
 
         @media (max-width: 700px) {
-            .grid,
-            .grid-3,
-            .resumo {
+            .grid, .grid-3, .resumo {
                 grid-template-columns: 1fr;
             }
 
@@ -307,6 +303,16 @@ HTML = """
                     </div>
                 </div>
 
+                <div class="campo" style="margin-top:16px;">
+                    <label>Priorizar</label>
+                    <select name="prioridade">
+                        <option value="menor_preco">Menor preço em dinheiro</option>
+                        <option value="menor_milhas">Menor valor em milhas</option>
+                        <option value="custo_beneficio">Melhor custo-benefício</option>
+                        <option value="mais_rapido">Mais rápido</option>
+                    </select>
+                </div>
+
                 <button class="btn" type="submit">Pesquisar viagem</button>
             </form>
 
@@ -341,13 +347,13 @@ HTML = """
                     </div>
 
                     <div class="item">
-                        <strong>Antecedência</strong>
-                        {{ resultado.antecedencia }} dias
+                        <strong>Prioridade</strong>
+                        {{ resultado.prioridade_label }}
                     </div>
                 </div>
 
                 <div class="faixa">
-                    Estimativa inteligente: valores simulados com base em antecedência, cabine e quantidade de passageiros.
+                    Melhor opção escolhida com base em: {{ resultado.prioridade_label }}.
                 </div>
 
                 <div class="cards-voos">
@@ -375,7 +381,7 @@ HTML = """
             {% endif %}
 
             <div class="rodape">
-                Versão online no Render • simulação inteligente de preços
+                Versão online no Render • filtro inteligente ativo
             </div>
         </div>
     </div>
@@ -415,6 +421,26 @@ def formatar_milhas(valor):
     texto = f"{valor:,.0f}".replace(",", "X").replace(".", ",").replace("X", ".")
     return f"{texto} milhas + taxas"
 
+def duracao_para_minutos(texto):
+    horas = 0
+    minutos = 0
+    if "h" in texto:
+        partes = texto.split("h")
+        horas = int(partes[0].strip())
+        resto = partes[1].replace("min", "").strip()
+        if resto:
+            minutos = int(resto)
+    return horas * 60 + minutos
+
+def prioridade_label(valor):
+    labels = {
+        "menor_preco": "Menor preço em dinheiro",
+        "menor_milhas": "Menor valor em milhas",
+        "custo_beneficio": "Melhor custo-benefício",
+        "mais_rapido": "Mais rápido"
+    }
+    return labels.get(valor, "Menor preço em dinheiro")
+
 @app.route("/", methods=["GET", "POST"])
 def home():
     resultado = None
@@ -428,6 +454,7 @@ def home():
         adultos = int(request.form.get("adultos"))
         criancas = int(request.form.get("criancas"))
         cabine = request.form.get("cabine")
+        prioridade = request.form.get("prioridade")
 
         try:
             ida_date = datetime.strptime(data_ida, "%Y-%m-%d").date()
@@ -440,7 +467,6 @@ def home():
 
         fator_antecedencia = calcular_fator_antecedencia(antecedencia)
         fator_cabine = calcular_fator_cabine(cabine)
-
         passageiros_equivalentes = adultos + (criancas * 0.75)
 
         base_latam = 920
@@ -491,12 +517,33 @@ def home():
             }
         ]
 
-        menor_preco = min(voo["preco_num"] for voo in dados_voos)
+        for voo in dados_voos:
+            voo["duracao_min"] = duracao_para_minutos(voo["duracao"])
+            voo["score_cb"] = (voo["preco_num"] / 100) + (voo["milhas_num"] / 10000) + (voo["duracao_min"] / 100)
+
+        if prioridade == "menor_preco":
+            melhor_valor = min(voo["preco_num"] for voo in dados_voos)
+            for voo in dados_voos:
+                voo["melhor"] = voo["preco_num"] == melhor_valor
+
+        elif prioridade == "menor_milhas":
+            melhor_valor = min(voo["milhas_num"] for voo in dados_voos)
+            for voo in dados_voos:
+                voo["melhor"] = voo["milhas_num"] == melhor_valor
+
+        elif prioridade == "mais_rapido":
+            melhor_valor = min(voo["duracao_min"] for voo in dados_voos)
+            for voo in dados_voos:
+                voo["melhor"] = voo["duracao_min"] == melhor_valor
+
+        else:
+            melhor_valor = min(voo["score_cb"] for voo in dados_voos)
+            for voo in dados_voos:
+                voo["melhor"] = voo["score_cb"] == melhor_valor
 
         for voo in dados_voos:
             voo["preco"] = formatar_reais(voo["preco_num"])
             voo["milhas"] = formatar_milhas(voo["milhas_num"])
-            voo["melhor"] = voo["preco_num"] == menor_preco
 
         voos = dados_voos
 
@@ -508,7 +555,7 @@ def home():
             "adultos": adultos,
             "criancas": criancas,
             "cabine": cabine,
-            "antecedencia": antecedencia
+            "prioridade_label": prioridade_label(prioridade)
         }
 
     return render_template_string(HTML, resultado=resultado, voos=voos)
