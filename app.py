@@ -40,7 +40,7 @@ HTML = """
         }
 
         .container {
-            max-width: 950px;
+            max-width: 1100px;
             margin: 30px auto;
             padding: 16px;
         }
@@ -135,12 +135,58 @@ HTML = """
             margin-bottom: 6px;
         }
 
-        .destaque {
-            margin-top: 16px;
-            background: #e0edff;
-            color: #16306d;
+        .cards-voos {
+            margin-top: 24px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 16px;
+        }
+
+        .voo {
+            background: white;
+            border: 1px solid #dbeafe;
+            border-radius: 16px;
+            padding: 18px;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.05);
+        }
+
+        .voo h3 {
+            margin-top: 0;
+            color: #1e3a8a;
+            font-size: 20px;
+        }
+
+        .linha {
+            margin: 8px 0;
+            font-size: 15px;
+        }
+
+        .preco {
+            margin-top: 14px;
+            padding: 10px;
             border-radius: 12px;
-            padding: 14px;
+            background: #eff6ff;
+            font-weight: bold;
+            color: #16306d;
+        }
+
+        .milhas {
+            margin-top: 10px;
+            padding: 10px;
+            border-radius: 12px;
+            background: #ecfdf5;
+            font-weight: bold;
+            color: #065f46;
+        }
+
+        .tag {
+            display: inline-block;
+            margin-top: 10px;
+            background: #dbeafe;
+            color: #1d4ed8;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 13px;
             font-weight: bold;
         }
 
@@ -149,6 +195,12 @@ HTML = """
             font-size: 13px;
             color: #64748b;
             margin-top: 18px;
+        }
+
+        @media (max-width: 900px) {
+            .cards-voos {
+                grid-template-columns: 1fr;
+            }
         }
 
         @media (max-width: 700px) {
@@ -171,7 +223,7 @@ HTML = """
 <body>
     <div class="topo">
         <h1>Passagens e Milhas</h1>
-        <p>Pesquise e organize sua próxima viagem</p>
+        <p>Pesquise e compare opções da sua próxima viagem</p>
     </div>
 
     <div class="container">
@@ -267,18 +319,31 @@ HTML = """
 
                     <div class="item">
                         <strong>Status</strong>
-                        Pesquisa registrada com sucesso
+                        Comparação inicial gerada
                     </div>
                 </div>
 
-                <div class="destaque">
-                    Próxima etapa: conectar preços e milhas reais, comparar opções e exibir resultados em cards.
+                <div class="cards-voos">
+                    {% for voo in voos %}
+                    <div class="voo">
+                        <h3>{{ voo.companhia }}</h3>
+                        <div class="linha"><strong>Rota:</strong> {{ resultado.origem }} → {{ resultado.destino }}</div>
+                        <div class="linha"><strong>Saída:</strong> {{ resultado.data_ida }}</div>
+                        <div class="linha"><strong>Cabine:</strong> {{ resultado.cabine }}</div>
+                        <div class="linha"><strong>Bagagem:</strong> {{ voo.bagagem }}</div>
+                        <div class="linha"><strong>Escalas:</strong> {{ voo.escalas }}</div>
+
+                        <div class="preco">Preço em dinheiro: {{ voo.preco }}</div>
+                        <div class="milhas">Preço em milhas: {{ voo.milhas }}</div>
+                        <div class="tag">{{ voo.tag }}</div>
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
             {% endif %}
 
             <div class="rodape">
-                Versão inicial online no Render
+                Versão online no Render • resultados demonstrativos
             </div>
         </div>
     </div>
@@ -289,6 +354,7 @@ HTML = """
 @app.route("/", methods=["GET", "POST"])
 def home():
     resultado = None
+    voos = []
 
     if request.method == "POST":
         resultado = {
@@ -301,7 +367,34 @@ def home():
             "cabine": request.form.get("cabine")
         }
 
-    return render_template_string(HTML, resultado=resultado)
+        voos = [
+            {
+                "companhia": "LATAM",
+                "bagagem": "1 bagagem de mão",
+                "escalas": "Sem escalas",
+                "preco": "R$ 1.245",
+                "milhas": "38.000 milhas + taxas",
+                "tag": "Melhor tempo"
+            },
+            {
+                "companhia": "GOL",
+                "bagagem": "1 bagagem de mão",
+                "escalas": "1 escala",
+                "preco": "R$ 1.089",
+                "milhas": "35.500 milhas + taxas",
+                "tag": "Melhor custo"
+            },
+            {
+                "companhia": "Azul",
+                "bagagem": "Bagagem de mão + item pessoal",
+                "escalas": "Sem escalas",
+                "preco": "R$ 1.328",
+                "milhas": "41.000 milhas + taxas",
+                "tag": "Mais confortável"
+            }
+        ]
+
+    return render_template_string(HTML, resultado=resultado, voos=voos)
 
 if __name__ == "__main__":
     app.run(debug=True)
